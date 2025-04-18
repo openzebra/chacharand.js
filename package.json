@@ -1,12 +1,50 @@
 {
-  "name": "chacha.js",
-  "module": "index.ts",
+  "name": "@hicaru/chacharand.js",
+  "version": "0.0.1",
+  "description": "Pure JavaScript implementation of ChaCha8/12/20 random number generator",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
   "type": "module",
+  "files": ["dist"],
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "tsc",
+    "build:watch": "tsc --watch"
+  },
+  "keywords": [
+    "chacha",
+    "chacha8",
+    "chacha12",
+    "chacha20",
+    "random",
+    "crypto",
+    "pure-js",
+    "prng",
+    "cryptography",
+    "rng",
+    "stream-cipher"
+  ],
+  "author": "Rinat",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openzebra/chacha.js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/openzebra/chacha.js/issues"
+  },
+  "homepage": "https://github.com/openzebra/chacha.js#readme",
   "devDependencies": {
-    "@types/bun": "latest",
+    "@types/bun": "^1.2.9",
+    "@vitest/coverage-v8": "^3.1.1",
     "vitest": "^3.1.1"
   },
   "peerDependencies": {
-    "typescript": "^5.0.0"
+    "typescript": "^5.8.3"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
