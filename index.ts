@@ -19,107 +19,65 @@ class ChaChaCore {
         if (seed.length !== 32) throw new Error("Seed must be 32 bytes");
         if (nonce.length !== 8 && nonce.length !== 12) throw new Error("Nonce must be 8 or 12 bytes");
         this.rounds = rounds / 2;
-
         this.state = new Uint32Array(STATE_WORDS);
         this.state[0] = 0x61707865;
         this.state[1] = 0x3320646e;
         this.state[2] = 0x79622d32;
         this.state[3] = 0x6b206574;
-
         const seedView = new DataView(seed.buffer, seed.byteOffset, seed.byteLength);
         for (let i = 0; i < 8; i++) {
             this.state[4 + i] = seedView.getUint32(i * 4, true);
         }
-
         this.state[12] = 0;
         this.state[13] = 0;
-
         const nonceView = new DataView(nonce.buffer, nonce.byteOffset, nonce.byteLength);
         if (nonce.length === 12) {
-             this.state[12] = nonceView.getUint32(0, true);
-             this.state[14] = nonceView.getUint32(4, true);
-             this.state[15] = nonceView.getUint32(8, true);
-        } else { // 8 byte nonce
-             this.state[14] = nonceView.getUint32(0, true);
-             this.state[15] = nonceView.getUint32(4, true);
+            this.state[13] = nonceView.getUint32(0, true);
+            this.state[14] = nonceView.getUint32(4, true);
+            this.state[15] = nonceView.getUint32(8, true);
+            this.state[12] = 0;
+        } else {
+            this.state[14] = nonceView.getUint32(0, true);
+            this.state[15] = nonceView.getUint32(4, true);
         }
     }
 
+    private quarterRound(state: Uint32Array, a: number, b: number, c: number, d: number): void {
+        state[a] = (state[a] + state[b]) >>> 0; state[d] = rotr32(state[d] ^ state[a], 16);
+        state[c] = (state[c] + state[d]) >>> 0; state[b] = rotr32(state[b] ^ state[c], 20);
+        state[a] = (state[a] + state[b]) >>> 0; state[d] = rotr32(state[d] ^ state[a], 24);
+        state[c] = (state[c] + state[d]) >>> 0; state[b] = rotr32(state[b] ^ state[c], 25);
+    }
+
     private coreRound(state: Uint32Array): void {
-        // Column rounds
-        state[0] += state[4]; state[12] = rotr32(state[12] ^ state[0], 16);
-        state[1] += state[5]; state[13] = rotr32(state[13] ^ state[1], 16);
-        state[2] += state[6]; state[14] = rotr32(state[14] ^ state[2], 16);
-        state[3] += state[7]; state[15] = rotr32(state[15] ^ state[3], 16);
-
-        state[8] += state[12]; state[4] = rotr32(state[4] ^ state[8], 12);
-        state[9] += state[13]; state[5] = rotr32(state[5] ^ state[9], 12);
-        state[10] += state[14]; state[6] = rotr32(state[6] ^ state[10], 12);
-        state[11] += state[15]; state[7] = rotr32(state[7] ^ state[11], 12);
-
-        state[0] += state[4]; state[12] = rotr32(state[12] ^ state[0], 8);
-        state[1] += state[5]; state[13] = rotr32(state[13] ^ state[1], 8);
-        state[2] += state[6]; state[14] = rotr32(state[14] ^ state[2], 8);
-        state[3] += state[7]; state[15] = rotr32(state[15] ^ state[3], 8);
-
-        state[8] += state[12]; state[4] = rotr32(state[4] ^ state[8], 7);
-        state[9] += state[13]; state[5] = rotr32(state[5] ^ state[9], 7);
-        state[10] += state[14]; state[6] = rotr32(state[6] ^ state[10], 7);
-        state[11] += state[15]; state[7] = rotr32(state[7] ^ state[11], 7);
-
-        // Diagonal rounds
-        state[0] += state[5]; state[15] = rotr32(state[15] ^ state[0], 16);
-        state[1] += state[6]; state[12] = rotr32(state[12] ^ state[1], 16);
-        state[2] += state[7]; state[13] = rotr32(state[13] ^ state[2], 16);
-        state[3] += state[4]; state[14] = rotr32(state[14] ^ state[3], 16);
-
-        state[10] += state[15]; state[5] = rotr32(state[5] ^ state[10], 12);
-        state[11] += state[12]; state[6] = rotr32(state[6] ^ state[11], 12);
-        state[8] += state[13]; state[7] = rotr32(state[7] ^ state[8], 12);
-        state[9] += state[14]; state[4] = rotr32(state[4] ^ state[9], 12);
-
-        state[0] += state[5]; state[15] = rotr32(state[15] ^ state[0], 8);
-        state[1] += state[6]; state[12] = rotr32(state[12] ^ state[1], 8);
-        state[2] += state[7]; state[13] = rotr32(state[13] ^ state[2], 8);
-        state[3] += state[4]; state[14] = rotr32(state[14] ^ state[3], 8);
-
-        state[10] += state[15]; state[5] = rotr32(state[5] ^ state[10], 7);
-        state[11] += state[12]; state[6] = rotr32(state[6] ^ state[11], 7);
-        state[8] += state[13]; state[7] = rotr32(state[7] ^ state[8], 7);
-        state[9] += state[14]; state[4] = rotr32(state[4] ^ state[9], 7);
-
-        // Ensure results are Uint32
-        for(let i = 0; i < STATE_WORDS; i++) {
-            state[i] = state[i] >>> 0;
-        }
+        this.quarterRound(state, 0, 4, 8, 12);
+        this.quarterRound(state, 1, 5, 9, 13);
+        this.quarterRound(state, 2, 6, 10, 14);
+        this.quarterRound(state, 3, 7, 11, 15);
+        this.quarterRound(state, 0, 5, 10, 15);
+        this.quarterRound(state, 1, 6, 11, 12);
+        this.quarterRound(state, 2, 7, 8, 13);
+        this.quarterRound(state, 3, 4, 9, 14);
     }
 
     generate(results: Uint32Array): void {
         if (results.length !== BUF_WORDS) throw new Error("Results buffer must have size " + BUF_WORDS);
-
         const workingState = new Uint32Array(STATE_WORDS);
-        const initial_state = new Uint32Array(this.state); // Keep original state for adding at the end
-
+        const blockInputState = new Uint32Array(this.state);
         for (let block = 0; block < BUF_BLOCKS; block++) {
-            workingState.set(this.state);
-
+            workingState.set(blockInputState);
             for (let i = 0; i < this.rounds; i++) {
                 this.coreRound(workingState);
             }
-
             for (let i = 0; i < STATE_WORDS; i++) {
-                 results[block * BLOCK_WORDS + i] = (workingState[i] + initial_state[i]) >>> 0;
+                results[block * BLOCK_WORDS + i] = (workingState[i] + blockInputState[i]) >>> 0;
             }
-
-            // Increment counter (state[12] and state[13])
-            this.state[12] = (this.state[12] + 1) >>> 0;
-            if (this.state[12] === 0) {
-                this.state[13] = (this.state[13] + 1) >>> 0;
+            blockInputState[12] = (blockInputState[12] + 1) >>> 0;
+            if (blockInputState[12] === 0) {
+                blockInputState[13] = (blockInputState[13] + 1) >>> 0;
             }
-             // Update initial state for next block's addition step if needed (only counter changes)
-            initial_state[12] = this.state[12];
-            initial_state[13] = this.state[13];
         }
+        this.state.set(blockInputState.subarray(12, 14), 12);
     }
 
     getBlockPos(): bigint {
@@ -144,7 +102,7 @@ class ChaChaCore {
         this.state[15] = Number((value >> 32n) & U32_MASK);
     }
 
-     getSeed(): Uint8Array {
+    getSeed(): Uint8Array {
         const seed = new Uint8Array(32);
         const view = new DataView(seed.buffer);
         for (let i = 0; i < 8; i++) {
@@ -155,12 +113,12 @@ class ChaChaCore {
 
     clone(): ChaChaCore {
         const newCore = Object.create(ChaChaCore.prototype);
-        newCore.state = new Uint32Array(this.state);
+        const newStateBuffer = this.state.buffer.slice(0);
+        newCore.state = new Uint32Array(newStateBuffer);
         newCore.rounds = this.rounds;
         return newCore;
     }
 }
-
 
 export class ChaChaRng {
     private core: ChaChaCore;
@@ -171,13 +129,13 @@ export class ChaChaRng {
     private constructor(core: ChaChaCore, rounds: number) {
         this.core = core;
         this.buffer = new Uint32Array(BUF_WORDS);
-        this.index = BUF_WORDS; // Force refill on first use
+        this.index = BUF_WORDS;
         this.rounds = rounds;
     }
 
     static fromSeed(seed: Uint8Array, rounds: 8 | 12 | 20): ChaChaRng {
-         const core = new ChaChaCore(seed, new Uint8Array(8), rounds); // Default 8-byte zero nonce
-         return new ChaChaRng(core, rounds);
+        const core = new ChaChaCore(seed, new Uint8Array(8), rounds);
+        return new ChaChaRng(core, rounds);
     }
 
     private refill(): void {
@@ -201,58 +159,49 @@ export class ChaChaRng {
     }
 
     fillBytes(bytes: Uint8Array): void {
-        let offset = 0;
         const len = bytes.length;
+        const byteView = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        let offset = 0;
         while (offset < len) {
             if (this.index >= BUF_WORDS) {
                 this.refill();
             }
-            const remainingWords = BUF_WORDS - this.index;
-            const remainingBufferBytes = remainingWords * 4;
-
-            const bufferView = new DataView(this.buffer.buffer, this.buffer.byteOffset + this.index * 4);
-            const bytesToCopy = Math.min(len - offset, remainingBufferBytes);
-
-            for(let i = 0; i < bytesToCopy; ++i) {
-                bytes[offset + i] = bufferView.getUint8(i);
+            const bufferRemainingWords = BUF_WORDS - this.index;
+            const bufferRemainingBytes = bufferRemainingWords * 4;
+            const bytesToCopy = Math.min(len - offset, bufferRemainingBytes);
+            const internalBufferView = new DataView(this.buffer.buffer, this.buffer.byteOffset + this.index * 4);
+            for (let i = 0; i < bytesToCopy; i++) {
+                byteView.setUint8(offset + i, internalBufferView.getUint8(i));
             }
-
-            this.index += Math.ceil(bytesToCopy / 4); // Advance index by words used
+            this.index += Math.ceil(bytesToCopy / 4);
             offset += bytesToCopy;
         }
     }
 
-     getWordPos(): bigint {
+    getWordPos(): bigint {
         const bufEndBlock = this.core.getBlockPos();
-        const bufStartBlock = (bufEndBlock - BigInt(BUF_BLOCKS)) & U64_MASK; // Wrap subtraction
-
+        const bufStartBlock = (bufEndBlock - BigInt(BUF_BLOCKS)) & ((1n << 64n) - 1n);
         const bufOffsetWords = BigInt(this.index);
-        const blocksPart = bufOffsetWords / BigInt(BLOCK_WORDS);
-        const wordsPart = bufOffsetWords % BigInt(BLOCK_WORDS);
+        const blocksConsumed = bufOffsetWords / BigInt(BLOCK_WORDS);
+        const wordsConsumedInBlock = bufOffsetWords % BigInt(BLOCK_WORDS);
+        const currentBlock = (bufStartBlock + blocksConsumed) & ((1n << 64n) - 1n);
+        const currentWordPos = (currentBlock * BigInt(BLOCK_WORDS)) + wordsConsumedInBlock;
 
-        const posBlock = (bufStartBlock + blocksPart) & U64_MASK; // Wrap addition
-        const posBlockWords = posBlock * BigInt(BLOCK_WORDS);
-
-        // Combine block position (bits 4-67) and word offset (bits 0-3)
-        // Result needs 68 bits, use BigInt
-        return posBlockWords + wordsPart;
-     }
+        return currentWordPos;
+    }
 
     setWordPos(wordOffset: bigint): void {
-        const block = wordOffset / BigInt(BLOCK_WORDS);
+        const targetBlock = wordOffset / BigInt(BLOCK_WORDS);
         const wordIndexInBlock = Number(wordOffset % BigInt(BLOCK_WORDS));
-
-        this.core.setBlockPos(block);
-        this.refill(); // Refill based on new block position
-        this.index = wordIndexInBlock; // Set index within the newly generated buffer
+        this.core.setBlockPos(targetBlock);
+        this.refill();
+        this.index = Math.min(Math.max(wordIndexInBlock, 0), BUF_WORDS - 1);
     }
 
     setStream(stream: bigint): void {
         this.core.setNonce(stream);
-        // Changing the stream requires regenerating the buffer, even if index != BUF_WORDS
-        // Preserve the current absolute position
         const wp = this.getWordPos();
-        this.setWordPos(wp); // This implicitly refills the buffer
+        this.setWordPos(wp);
     }
 
     getStream(): bigint {
