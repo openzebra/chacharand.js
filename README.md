@@ -1,9 +1,11 @@
-# chacharand.js
+# @hicaru/chacharand.js
 
 A pure JavaScript implementation of ChaCha8/12/20 cryptographically secure random number generators.
 
 [![npm version](https://img.shields.io/npm/v/@hicaru/chacharand.js.svg)](https://www.npmjs.com/package/@hicaru/chacharand.js)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
+Made by [https://github.com/hicaru](https://github.com/hicaru)
 
 ## Overview
 
