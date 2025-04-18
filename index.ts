@@ -5,7 +5,6 @@ const BUF_WORDS = BLOCK_WORDS * BUF_BLOCKS;
 const STATE_WORDS = 16;
 
 const U32_MASK = 0xffffffffn;
-const U64_MASK = 0xffffffffffffffffn;
 
 function rotr32(x: number, n: number): number {
     return ((x >>> n) | (x << (32 - n))) >>> 0;
