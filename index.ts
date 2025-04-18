@@ -137,6 +137,30 @@ export class ChaChaRng {
         return new ChaChaRng(core, rounds);
     }
 
+    static fromU64Seed(state: bigint, rounds: 8 | 12 | 20): ChaChaRng {
+        const seed = new Uint8Array(32);
+        const stateObj = { value: state };
+
+        for (let i = 0; i < 8; i++) {
+            const x = ChaChaRng.pcg32(stateObj);
+            const view = new DataView(seed.buffer, i * 4, 4);
+            view.setUint32(0, x, true);
+        }
+
+        return ChaChaRng.fromSeed(seed, rounds);
+    }
+
+    private static pcg32(state: { value: bigint }): number {
+        const MUL = 6364136223846793005n;
+        const INC = 11634580027462260723n;
+        state.value = (state.value * MUL + INC) & ((1n << 64n) - 1n);
+        const s = state.value;
+        const xorshifted = Number((((s >> 18n) ^ s) >> 27n) & 0xFFFFFFFFn);
+        const rot = Number((s >> 59n) & 0x1Fn);
+        const x = (xorshifted >>> rot) | (xorshifted << (32 - rot) & 0xFFFFFFFF);
+        return x;
+    }
+
     private refill(): void {
         this.core.generate(this.buffer);
         this.index = 0;

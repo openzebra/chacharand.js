@@ -1,9 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { ChaCha8Rng, ChaCha12Rng, ChaCha20Rng } from '../';
+import { ChaCha8Rng, ChaCha12Rng, ChaCha20Rng, ChaChaRng } from '../';
 
 describe('ChaCha Tests', () => {
-    const ChaChaRng = ChaCha20Rng;
-
     it('test_chacha_serde_roundtrip', () => {
         const seed = new Uint8Array([
             1, 0, 52, 0, 0, 0, 0, 0, 1, 0, 10, 0, 22, 32, 0, 0, 2, 0, 55, 49, 0, 11, 0, 0, 3, 0, 0,
@@ -62,7 +60,7 @@ describe('ChaCha Tests', () => {
 
     it('test_chacha_serde_format_stability', () => {
         const j = `{"seed":[4,8,15,16,23,42,4,8,15,16,23,42,4,8,15,16,23,42,4,8,15,16,23,42,4,8,15,16,23,42,4,8],"stream":27182818284,"word_pos":314159265359}`;
-        const r = Object.assign(Object.create(ChaChaRng(new Uint8Array(32)).constructor.prototype), JSON.parse(j));
+        const r = Object.assign(Object.create(ChaCha20Rng(new Uint8Array(32)).constructor.prototype), JSON.parse(j));
         const j1 = JSON.stringify(r);
         expect(j).toBe(j1);
     });
@@ -72,7 +70,7 @@ describe('ChaCha Tests', () => {
             0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0,
             0, 0, 0,
         ]);
-        const rng1 = ChaChaRng(seed);
+        const rng1 = ChaCha20Rng(seed);
         rng1.nextU32();
         const rng2 = rng1.clone();
 
@@ -83,7 +81,7 @@ describe('ChaCha Tests', () => {
 
     it('test_chacha_true_values_a', () => {
         const seed = new Uint8Array(32);
-        const rng = ChaChaRng(seed);
+        const rng = ChaCha20Rng(seed);
         const results = Array.from({ length: 16 }, () => rng.nextU32());
         const expected = [
             0xade0b876, 0x903df1a0, 0xe56a5d40, 0x28bd8653, 0xb819d2bd, 0x1aed8da0, 0xccef36a8,
@@ -106,7 +104,7 @@ describe('ChaCha Tests', () => {
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 1,
         ]);
-        const rng = ChaChaRng(seed);
+        const rng = ChaCha20Rng(seed);
         for (let i = 0; i < 16; i++) rng.nextU32();
         const results = Array.from({ length: 16 }, () => rng.nextU32());
         const expected = [
@@ -130,13 +128,13 @@ describe('ChaCha Tests', () => {
         const expectedEnd = 3 * 16;
         const results = Array.from({ length: 16 }, () => 0);
 
-        const rng1 = ChaChaRng(seed);
+        const rng1 = ChaCha20Rng(seed);
         for (let i = 0; i < 32; i++) rng1.nextU32();
         for (let i = 0; i < 16; i++) results[i] = rng1.nextU32();
         expect(results).toEqual(expected);
         expect(rng1.getWordPos()).toBe(BigInt(expectedEnd));
 
-        const rng2 = ChaChaRng(seed);
+        const rng2 = ChaCha20Rng(seed);
         rng2.setWordPos(BigInt(2 * 16));
         for (let i = 0; i < 16; i++) results[i] = rng2.nextU32();
         expect(results).toEqual(expected);
@@ -161,7 +159,7 @@ describe('ChaCha Tests', () => {
             0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0, 6, 0, 0, 0, 7,
             0, 0, 0,
         ]);
-        const rng = ChaChaRng(seed);
+        const rng = ChaCha20Rng(seed);
         const results = Array.from({ length: 16 }, () => {
             const value = rng.nextU32();
             for (let i = 0; i < 16; i++) rng.nextU32();
@@ -177,7 +175,7 @@ describe('ChaCha Tests', () => {
 
     it('test_chacha_true_bytes', () => {
         const seed = new Uint8Array(32);
-        const rng = ChaChaRng(seed);
+        const rng = ChaCha20Rng(seed);
         const results = new Uint8Array(32);
         rng.fillBytes(results);
         const expected = [
@@ -189,7 +187,7 @@ describe('ChaCha Tests', () => {
 
     it('test_chacha_nonce', () => {
         const seed = new Uint8Array(32);
-        const rng = ChaChaRng(seed);
+        const rng = ChaCha20Rng(seed);
         rng.setStream(BigInt(2) << BigInt(24 + 32));
         const results = Array.from({ length: 16 }, () => rng.nextU32());
         const expected = [
@@ -205,7 +203,7 @@ describe('ChaCha Tests', () => {
             0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0, 6, 0, 0, 0, 7,
             0, 0, 0,
         ]);
-        const rng = ChaChaRng(seed);
+        const rng = ChaCha20Rng(seed);
         const clone = rng.clone();
         for (let i = 0; i < 16; i++) expect(rng.nextU64()).toBe(clone.nextU64());
         rng.setStream(BigInt(51));
@@ -215,30 +213,35 @@ describe('ChaCha Tests', () => {
     });
 
     it('test_chacha_word_pos_wrap_exact', () => {
-        const rng = ChaChaRng(new Uint8Array(32));
+        const rng = ChaCha20Rng(new Uint8Array(32));
         const lastBlock = (BigInt(1) << BigInt(68)) - BigInt(4 * 16);
         rng.setWordPos(lastBlock);
         expect(rng.getWordPos()).toBe(lastBlock);
     });
 
     it('test_chacha_word_pos_wrap_excess', () => {
-        const rng = ChaChaRng(new Uint8Array(32));
+        const rng = ChaCha20Rng(new Uint8Array(32));
         const lastBlock = (BigInt(1) << BigInt(68)) - BigInt(16);
         rng.setWordPos(lastBlock);
         expect(rng.getWordPos()).toBe(lastBlock);
     });
 
     it('test_chacha_word_pos_zero', () => {
-        const rng = ChaChaRng(new Uint8Array(32));
+        const rng = ChaCha20Rng(new Uint8Array(32));
         expect(rng.getWordPos()).toBe(BigInt(0));
         rng.setWordPos(BigInt(0));
         expect(rng.getWordPos()).toBe(BigInt(0));
     });
 
     it('test_trait_objects', () => {
-        const rng1 = ChaChaRng(new Uint8Array(32));
+        const rng1 = ChaCha20Rng(new Uint8Array(32));
         const rng2 = rng1.clone();
         for (let i = 0; i < 1000; i++) expect(rng1.nextU64()).toBe(rng2.nextU64());
+    });
+
+    it('test_chacha_from_u64_seed', () => {
+        const rng = ChaChaRng.fromU64Seed(42n, 20);
+        expect(rng.nextU64()).toBe(9482535800248027256n);
     });
 });
  
