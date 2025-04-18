@@ -112,9 +112,9 @@ class ChaChaCore {
 
     clone(): ChaChaCore {
         const newCore = Object.create(ChaChaCore.prototype);
-        const newStateBuffer = this.state.buffer.slice(0);
-        newCore.state = new Uint32Array(newStateBuffer);
+        newCore.state = this.state.slice();
         newCore.rounds = this.rounds;
+
         return newCore;
     }
 }
@@ -213,10 +213,12 @@ export class ChaChaRng {
 
     clone(): ChaChaRng {
         const newRng = Object.create(ChaChaRng.prototype);
+
         newRng.core = this.core.clone();
-        newRng.buffer = new Uint32Array(this.buffer);
+        newRng.buffer = this.buffer.slice();
         newRng.index = this.index;
         newRng.rounds = this.rounds;
+
         return newRng;
     }
 }

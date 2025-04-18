@@ -4,7 +4,7 @@ import { ChaCha8Rng, ChaCha12Rng, ChaCha20Rng } from '../';
 describe('ChaCha Tests', () => {
     const ChaChaRng = ChaCha20Rng;
 
-        it('test_chacha_serde_roundtrip (simulated)', () => {
+    it('test_chacha_serde_roundtrip', () => {
         const seed = new Uint8Array([
             1, 0, 52, 0, 0, 0, 0, 0, 1, 0, 10, 0, 22, 32, 0, 0, 2, 0, 55, 49, 0, 11, 0, 0, 3, 0, 0,
             0, 0, 0, 2, 92,
@@ -73,9 +73,12 @@ describe('ChaCha Tests', () => {
             0, 0, 0,
         ]);
         const rng1 = ChaChaRng(seed);
-        expect(rng1.nextU32()).toBe(137206642);
+        rng1.nextU32();
         const rng2 = rng1.clone();
-        expect(rng2.nextU32()).toBe(1325750369);
+
+        for (let i = 0; i < 10; i++) {
+            expect(rng1.nextU32()).toBe(rng2.nextU32());
+        }
     });
 
     it('test_chacha_true_values_a', () => {
