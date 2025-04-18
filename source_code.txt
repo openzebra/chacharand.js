@@ -1,0 +1,522 @@
+Project Path: chacha.js
+
+Source Tree:
+
+```txt
+chacha.js
+├── __tests__
+│   └── chacha.test.ts
+└── index.ts
+
+```
+
+`chacha.js/__tests__/chacha.test.ts`:
+
+```ts
+import { describe, it, expect } from 'vitest';
+import { ChaCha8Rng, ChaCha12Rng, ChaCha20Rng, ChaChaRng } from '../';
+
+describe('ChaCha Tests', () => {
+    it('test_chacha_serde_roundtrip', () => {
+        const seed = new Uint8Array([
+            1, 0, 52, 0, 0, 0, 0, 0, 1, 0, 10, 0, 22, 32, 0, 0, 2, 0, 55, 49, 0, 11, 0, 0, 3, 0, 0,
+            0, 0, 0, 2, 92,
+        ]);
+
+        let rng1_20 = ChaCha20Rng(seed);
+        rng1_20.nextU32();
+        rng1_20.nextU64();
+
+        const state1_20 = {
+            seed: rng1_20.getSeed(),
+            stream: rng1_20.getStream(),
+            wordPos: rng1_20.getWordPos(),
+        };
+
+        let decoded1_20 = ChaCha20Rng(seed);
+        decoded1_20.setStream(state1_20.stream);
+        decoded1_20.setWordPos(state1_20.wordPos);
+
+        expect(decoded1_20.getSeed()).toEqual(rng1_20.getSeed());
+        expect(decoded1_20.getStream()).toEqual(rng1_20.getStream());
+        expect(decoded1_20.getWordPos()).toEqual(rng1_20.getWordPos());
+        expect(rng1_20.nextU32()).toEqual(decoded1_20.nextU32());
+        expect(rng1_20.nextU64()).toEqual(decoded1_20.nextU64());
+        let rng1_12 = ChaCha12Rng(seed);
+        rng1_12.nextU32();
+        rng1_12.nextU64();
+        const state1_12 = {
+            seed: rng1_12.getSeed(),
+            stream: rng1_12.getStream(),
+            wordPos: rng1_12.getWordPos(),
+        };
+        let decoded1_12 = ChaCha12Rng(seed);
+        decoded1_12.setStream(state1_12.stream);
+        decoded1_12.setWordPos(state1_12.wordPos);
+        expect(decoded1_12.getWordPos()).toEqual(rng1_12.getWordPos());
+        expect(rng1_12.nextU32()).toEqual(decoded1_12.nextU32());
+        expect(rng1_12.nextU64()).toEqual(decoded1_12.nextU64());
+
+        let rng1_8 = ChaCha8Rng(seed);
+        rng1_8.nextU32();
+        rng1_8.nextU64();
+        const state1_8 = {
+            seed: rng1_8.getSeed(),
+            stream: rng1_8.getStream(),
+            wordPos: rng1_8.getWordPos(),
+        };
+        let decoded1_8 = ChaCha8Rng(seed);
+        decoded1_8.setStream(state1_8.stream);
+        decoded1_8.setWordPos(state1_8.wordPos);
+        expect(decoded1_8.getWordPos()).toEqual(rng1_8.getWordPos());
+        expect(rng1_8.nextU32()).toEqual(decoded1_8.nextU32());
+        expect(rng1_8.nextU64()).toEqual(decoded1_8.nextU64());
+    });
+
+    it('test_chacha_serde_format_stability', () => {
+        const j = `{"seed":[4,8,15,16,23,42,4,8,15,16,23,42,4,8,15,16,23,42,4,8,15,16,23,42,4,8,15,16,23,42,4,8],"stream":27182818284,"word_pos":314159265359}`;
+        const r = Object.assign(Object.create(ChaCha20Rng(new Uint8Array(32)).constructor.prototype), JSON.parse(j));
+        const j1 = JSON.stringify(r);
+        expect(j).toBe(j1);
+    });
+
+    it('test_chacha_construction', () => {
+        const seed = new Uint8Array([
+            0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0,
+            0, 0, 0,
+        ]);
+        const rng1 = ChaCha20Rng(seed);
+        rng1.nextU32();
+        const rng2 = rng1.clone();
+
+        for (let i = 0; i < 10; i++) {
+            expect(rng1.nextU32()).toBe(rng2.nextU32());
+        }
+    });
+
+    it('test_chacha_true_values_a', () => {
+        const seed = new Uint8Array(32);
+        const rng = ChaCha20Rng(seed);
+        const results = Array.from({ length: 16 }, () => rng.nextU32());
+        const expected = [
+            0xade0b876, 0x903df1a0, 0xe56a5d40, 0x28bd8653, 0xb819d2bd, 0x1aed8da0, 0xccef36a8,
+            0xc70d778b, 0x7c5941da, 0x8d485751, 0x3fe02477, 0x374ad8b8, 0xf4b8436a, 0x1ca11815,
+            0x69b687c3, 0x8665eeb2,
+        ];
+        expect(results).toEqual(expected);
+
+        const results2 = Array.from({ length: 16 }, () => rng.nextU32());
+        const expected2 = [
+            0xbee7079f, 0x7a385155, 0x7c97ba98, 0x0d082d73, 0xa0290fcb, 0x6965e348, 0x3e53c612,
+            0xed7aee32, 0x7621b729, 0x434ee69c, 0xb03371d5, 0xd539d874, 0x281fed31, 0x45fb0a51,
+            0x1f0ae1ac, 0x6f4d794b,
+        ];
+        expect(results2).toEqual(expected2);
+    });
+
+    it('test_chacha_true_values_b', () => {
+        const seed = new Uint8Array([
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 1,
+        ]);
+        const rng = ChaCha20Rng(seed);
+        for (let i = 0; i < 16; i++) rng.nextU32();
+        const results = Array.from({ length: 16 }, () => rng.nextU32());
+        const expected = [
+            0x2452eb3a, 0x9249f8ec, 0x8d829d9b, 0xddd4ceb1, 0xe8252083, 0x60818b01, 0xf38422b8,
+            0x5aaa49c9, 0xbb00ca8e, 0xda3ba7b4, 0xc4b592d1, 0xfdf2732f, 0x4436274e, 0x2561b3c8,
+            0xebdd4aa6, 0xa0136c00,
+        ];
+        expect(results).toEqual(expected);
+    });
+
+    it('test_chacha_true_values_c', () => {
+        const seed = new Uint8Array([
+            0, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0,
+        ]);
+        const expected = [
+            0xfb4dd572, 0x4bc42ef1, 0xdf922636, 0x327f1394, 0xa78dea8f, 0x5e269039, 0xa1bebbc1,
+            0xcaf09aae, 0xa25ab213, 0x48a6b46c, 0x1b9d9bcb, 0x092c5be6, 0x546ca624, 0x1bec45d5,
+            0x87f47473, 0x96f0992e,
+        ];
+        const expectedEnd = 3 * 16;
+        const results = Array.from({ length: 16 }, () => 0);
+
+        const rng1 = ChaCha20Rng(seed);
+        for (let i = 0; i < 32; i++) rng1.nextU32();
+        for (let i = 0; i < 16; i++) results[i] = rng1.nextU32();
+        expect(results).toEqual(expected);
+        expect(rng1.getWordPos()).toBe(BigInt(expectedEnd));
+
+        const rng2 = ChaCha20Rng(seed);
+        rng2.setWordPos(BigInt(2 * 16));
+        for (let i = 0; i < 16; i++) results[i] = rng2.nextU32();
+        expect(results).toEqual(expected);
+        expect(rng2.getWordPos()).toBe(BigInt(expectedEnd));
+
+        const buf = new Uint8Array(32);
+        rng2.fillBytes(buf);
+        expect(rng2.getWordPos()).toBe(BigInt(expectedEnd + 8));
+        rng2.fillBytes(buf.subarray(0, 25));
+        expect(rng2.getWordPos()).toBe(BigInt(expectedEnd + 15));
+        rng2.nextU64();
+        expect(rng2.getWordPos()).toBe(BigInt(expectedEnd + 17));
+        rng2.nextU32();
+        rng2.nextU64();
+        expect(rng2.getWordPos()).toBe(BigInt(expectedEnd + 20));
+        rng2.fillBytes(buf.subarray(0, 1));
+        expect(rng2.getWordPos()).toBe(BigInt(expectedEnd + 21));
+    });
+
+    it('test_chacha_multiple_blocks', () => {
+        const seed = new Uint8Array([
+            0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0, 6, 0, 0, 0, 7,
+            0, 0, 0,
+        ]);
+        const rng = ChaCha20Rng(seed);
+        const results = Array.from({ length: 16 }, () => {
+            const value = rng.nextU32();
+            for (let i = 0; i < 16; i++) rng.nextU32();
+            return value;
+        });
+        const expected = [
+            0xf225c81a, 0x6ab1be57, 0x04d42951, 0x70858036, 0x49884684, 0x64efec72, 0x4be2d186,
+            0x3615b384, 0x11cfa18e, 0xd3c50049, 0x75c775f6, 0x434c6530, 0x2c5bad8f, 0x898881dc,
+            0x5f1c86d9, 0xc1f8e7f4,
+        ];
+        expect(results).toEqual(expected);
+    });
+
+    it('test_chacha_true_bytes', () => {
+        const seed = new Uint8Array(32);
+        const rng = ChaCha20Rng(seed);
+        const results = new Uint8Array(32);
+        rng.fillBytes(results);
+        const expected = [
+            118, 184, 224, 173, 160, 241, 61, 144, 64, 93, 106, 229, 83, 134, 189, 40, 189, 210,
+            25, 184, 160, 141, 237, 26, 168, 54, 239, 204, 139, 119, 13, 199,
+        ];
+        expect(Array.from(results)).toEqual(expected);
+    });
+
+    it('test_chacha_nonce', () => {
+        const seed = new Uint8Array(32);
+        const rng = ChaCha20Rng(seed);
+        rng.setStream(BigInt(2) << BigInt(24 + 32));
+        const results = Array.from({ length: 16 }, () => rng.nextU32());
+        const expected = [
+            0x374dc6c2, 0x3736d58c, 0xb904e24a, 0xcd3f93ef, 0x88228b1a, 0x96a4dfb3, 0x5b76ab72,
+            0xc727ee54, 0x0e0e978a, 0xf3145c95, 0x1b748ea8, 0xf786c297, 0x99c28f5f, 0x628314e8,
+            0x398a19fa, 0x6ded1b53,
+        ];
+        expect(results).toEqual(expected);
+    });
+
+    it('test_chacha_clone_streams', () => {
+        const seed = new Uint8Array([
+            0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0, 6, 0, 0, 0, 7,
+            0, 0, 0,
+        ]);
+        const rng = ChaCha20Rng(seed);
+        const clone = rng.clone();
+        for (let i = 0; i < 16; i++) expect(rng.nextU64()).toBe(clone.nextU64());
+        rng.setStream(BigInt(51));
+        for (let i = 0; i < 7; i++) expect(rng.nextU32()).not.toBe(clone.nextU32());
+        clone.setStream(BigInt(51));
+        for (let i = 7; i < 16; i++) expect(rng.nextU32()).toBe(clone.nextU32());
+    });
+
+    it('test_chacha_word_pos_wrap_exact', () => {
+        const rng = ChaCha20Rng(new Uint8Array(32));
+        const lastBlock = (BigInt(1) << BigInt(68)) - BigInt(4 * 16);
+        rng.setWordPos(lastBlock);
+        expect(rng.getWordPos()).toBe(lastBlock);
+    });
+
+    it('test_chacha_word_pos_wrap_excess', () => {
+        const rng = ChaCha20Rng(new Uint8Array(32));
+        const lastBlock = (BigInt(1) << BigInt(68)) - BigInt(16);
+        rng.setWordPos(lastBlock);
+        expect(rng.getWordPos()).toBe(lastBlock);
+    });
+
+    it('test_chacha_word_pos_zero', () => {
+        const rng = ChaCha20Rng(new Uint8Array(32));
+        expect(rng.getWordPos()).toBe(BigInt(0));
+        rng.setWordPos(BigInt(0));
+        expect(rng.getWordPos()).toBe(BigInt(0));
+    });
+
+    it('test_trait_objects', () => {
+        const rng1 = ChaCha20Rng(new Uint8Array(32));
+        const rng2 = rng1.clone();
+        for (let i = 0; i < 1000; i++) expect(rng1.nextU64()).toBe(rng2.nextU64());
+    });
+
+    it('test_chacha_from_u64_seed', () => {
+        const rng = ChaChaRng.fromU64Seed(42n, 20);
+        expect(rng.nextU64()).toBe(9482535800248027256n);
+    });
+});
+ 
+
+```
+
+`chacha.js/index.ts`:
+
+```ts
+const BLOCK_WORDS = 16;
+const BUF_BLOCKS = 4;
+const BUF_WORDS = BLOCK_WORDS * BUF_BLOCKS;
+
+const STATE_WORDS = 16;
+
+const U32_MASK = 0xffffffffn;
+
+function rotr32(x: number, n: number): number {
+    return ((x >>> n) | (x << (32 - n))) >>> 0;
+}
+
+class ChaChaCore {
+    private state: Uint32Array;
+    private rounds: number;
+
+    constructor(seed: Uint8Array, nonce: Uint8Array, rounds: number) {
+        if (seed.length !== 32) throw new Error("Seed must be 32 bytes");
+        if (nonce.length !== 8 && nonce.length !== 12) throw new Error("Nonce must be 8 or 12 bytes");
+        this.rounds = rounds / 2;
+        this.state = new Uint32Array(STATE_WORDS);
+        this.state[0] = 0x61707865;
+        this.state[1] = 0x3320646e;
+        this.state[2] = 0x79622d32;
+        this.state[3] = 0x6b206574;
+        const seedView = new DataView(seed.buffer, seed.byteOffset, seed.byteLength);
+        for (let i = 0; i < 8; i++) {
+            this.state[4 + i] = seedView.getUint32(i * 4, true);
+        }
+        this.state[12] = 0;
+        this.state[13] = 0;
+        const nonceView = new DataView(nonce.buffer, nonce.byteOffset, nonce.byteLength);
+        if (nonce.length === 12) {
+            this.state[13] = nonceView.getUint32(0, true);
+            this.state[14] = nonceView.getUint32(4, true);
+            this.state[15] = nonceView.getUint32(8, true);
+            this.state[12] = 0;
+        } else {
+            this.state[14] = nonceView.getUint32(0, true);
+            this.state[15] = nonceView.getUint32(4, true);
+        }
+    }
+
+    private quarterRound(state: Uint32Array, a: number, b: number, c: number, d: number): void {
+        state[a] = (state[a] + state[b]) >>> 0; state[d] = rotr32(state[d] ^ state[a], 16);
+        state[c] = (state[c] + state[d]) >>> 0; state[b] = rotr32(state[b] ^ state[c], 20);
+        state[a] = (state[a] + state[b]) >>> 0; state[d] = rotr32(state[d] ^ state[a], 24);
+        state[c] = (state[c] + state[d]) >>> 0; state[b] = rotr32(state[b] ^ state[c], 25);
+    }
+
+    private coreRound(state: Uint32Array): void {
+        this.quarterRound(state, 0, 4, 8, 12);
+        this.quarterRound(state, 1, 5, 9, 13);
+        this.quarterRound(state, 2, 6, 10, 14);
+        this.quarterRound(state, 3, 7, 11, 15);
+        this.quarterRound(state, 0, 5, 10, 15);
+        this.quarterRound(state, 1, 6, 11, 12);
+        this.quarterRound(state, 2, 7, 8, 13);
+        this.quarterRound(state, 3, 4, 9, 14);
+    }
+
+    generate(results: Uint32Array): void {
+        if (results.length !== BUF_WORDS) throw new Error("Results buffer must have size " + BUF_WORDS);
+        const workingState = new Uint32Array(STATE_WORDS);
+        const blockInputState = new Uint32Array(this.state);
+        for (let block = 0; block < BUF_BLOCKS; block++) {
+            workingState.set(blockInputState);
+            for (let i = 0; i < this.rounds; i++) {
+                this.coreRound(workingState);
+            }
+            for (let i = 0; i < STATE_WORDS; i++) {
+                results[block * BLOCK_WORDS + i] = (workingState[i] + blockInputState[i]) >>> 0;
+            }
+            blockInputState[12] = (blockInputState[12] + 1) >>> 0;
+            if (blockInputState[12] === 0) {
+                blockInputState[13] = (blockInputState[13] + 1) >>> 0;
+            }
+        }
+        this.state.set(blockInputState.subarray(12, 14), 12);
+    }
+
+    getBlockPos(): bigint {
+        const low = BigInt(this.state[12]);
+        const high = BigInt(this.state[13]);
+        return (high << 32n) | low;
+    }
+
+    setBlockPos(value: bigint): void {
+        this.state[12] = Number(value & U32_MASK);
+        this.state[13] = Number((value >> 32n) & U32_MASK);
+    }
+
+    getNonce(): bigint {
+        const low = BigInt(this.state[14]);
+        const high = BigInt(this.state[15]);
+        return (high << 32n) | low;
+    }
+
+    setNonce(value: bigint): void {
+        this.state[14] = Number(value & U32_MASK);
+        this.state[15] = Number((value >> 32n) & U32_MASK);
+    }
+
+    getSeed(): Uint8Array {
+        const seed = new Uint8Array(32);
+        const view = new DataView(seed.buffer);
+        for (let i = 0; i < 8; i++) {
+            view.setUint32(i * 4, this.state[4 + i], true);
+        }
+        return seed;
+    }
+
+    clone(): ChaChaCore {
+        const newCore = Object.create(ChaChaCore.prototype);
+        newCore.state = this.state.slice();
+        newCore.rounds = this.rounds;
+
+        return newCore;
+    }
+}
+
+export class ChaChaRng {
+    private core: ChaChaCore;
+    private buffer: Uint32Array;
+    private index: number;
+    private rounds: number;
+
+    private constructor(core: ChaChaCore, rounds: number) {
+        this.core = core;
+        this.buffer = new Uint32Array(BUF_WORDS);
+        this.index = BUF_WORDS;
+        this.rounds = rounds;
+    }
+
+    static fromSeed(seed: Uint8Array, rounds: 8 | 12 | 20): ChaChaRng {
+        const core = new ChaChaCore(seed, new Uint8Array(8), rounds);
+        return new ChaChaRng(core, rounds);
+    }
+
+    static fromU64Seed(state: bigint, rounds: 8 | 12 | 20): ChaChaRng {
+        const seed = new Uint8Array(32);
+        const stateObj = { value: state };
+
+        for (let i = 0; i < 8; i++) {
+            const x = ChaChaRng.pcg32(stateObj);
+            const view = new DataView(seed.buffer, i * 4, 4);
+            view.setUint32(0, x, true);
+        }
+
+        return ChaChaRng.fromSeed(seed, rounds);
+    }
+
+    private static pcg32(state: { value: bigint }): number {
+        const MUL = 6364136223846793005n;
+        const INC = 11634580027462260723n;
+        state.value = (state.value * MUL + INC) & ((1n << 64n) - 1n);
+        const s = state.value;
+        const xorshifted = Number((((s >> 18n) ^ s) >> 27n) & 0xFFFFFFFFn);
+        const rot = Number((s >> 59n) & 0x1Fn);
+        const x = (xorshifted >>> rot) | (xorshifted << (32 - rot) & 0xFFFFFFFF);
+        return x;
+    }
+
+    private refill(): void {
+        this.core.generate(this.buffer);
+        this.index = 0;
+    }
+
+    nextU32(): number {
+        if (this.index >= BUF_WORDS) {
+            this.refill();
+        }
+        const val = this.buffer[this.index];
+        this.index++;
+        return val;
+    }
+
+    nextU64(): bigint {
+        const low = BigInt(this.nextU32());
+        const high = BigInt(this.nextU32());
+        return (high << 32n) | low;
+    }
+
+    fillBytes(bytes: Uint8Array): void {
+        const len = bytes.length;
+        const byteView = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        let offset = 0;
+        while (offset < len) {
+            if (this.index >= BUF_WORDS) {
+                this.refill();
+            }
+            const bufferRemainingWords = BUF_WORDS - this.index;
+            const bufferRemainingBytes = bufferRemainingWords * 4;
+            const bytesToCopy = Math.min(len - offset, bufferRemainingBytes);
+            const internalBufferView = new DataView(this.buffer.buffer, this.buffer.byteOffset + this.index * 4);
+            for (let i = 0; i < bytesToCopy; i++) {
+                byteView.setUint8(offset + i, internalBufferView.getUint8(i));
+            }
+            this.index += Math.ceil(bytesToCopy / 4);
+            offset += bytesToCopy;
+        }
+    }
+
+    getWordPos(): bigint {
+        const bufEndBlock = this.core.getBlockPos();
+        const bufStartBlock = (bufEndBlock - BigInt(BUF_BLOCKS)) & ((1n << 64n) - 1n);
+        const bufOffsetWords = BigInt(this.index);
+        const blocksConsumed = bufOffsetWords / BigInt(BLOCK_WORDS);
+        const wordsConsumedInBlock = bufOffsetWords % BigInt(BLOCK_WORDS);
+        const currentBlock = (bufStartBlock + blocksConsumed) & ((1n << 64n) - 1n);
+        const currentWordPos = (currentBlock * BigInt(BLOCK_WORDS)) + wordsConsumedInBlock;
+
+        return currentWordPos;
+    }
+
+    setWordPos(wordOffset: bigint): void {
+        const targetBlock = wordOffset / BigInt(BLOCK_WORDS);
+        const wordIndexInBlock = Number(wordOffset % BigInt(BLOCK_WORDS));
+        this.core.setBlockPos(targetBlock);
+        this.refill();
+        this.index = Math.min(Math.max(wordIndexInBlock, 0), BUF_WORDS - 1);
+    }
+
+    setStream(stream: bigint): void {
+        this.core.setNonce(stream);
+        const wp = this.getWordPos();
+        this.setWordPos(wp);
+    }
+
+    getStream(): bigint {
+        return this.core.getNonce();
+    }
+
+    getSeed(): Uint8Array {
+        return this.core.getSeed();
+    }
+
+    clone(): ChaChaRng {
+        const newRng = Object.create(ChaChaRng.prototype);
+
+        newRng.core = this.core.clone();
+        newRng.buffer = this.buffer.slice();
+        newRng.index = this.index;
+        newRng.rounds = this.rounds;
+
+        return newRng;
+    }
+}
+
+export const ChaCha8Rng = (seed: Uint8Array) => ChaChaRng.fromSeed(seed, 8);
+export const ChaCha12Rng = (seed: Uint8Array) => ChaChaRng.fromSeed(seed, 12);
+export const ChaCha20Rng = (seed: Uint8Array) => ChaChaRng.fromSeed(seed, 20);
+
+```
