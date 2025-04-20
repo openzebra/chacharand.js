@@ -1,9 +1,7 @@
 const BLOCK_WORDS = 16;
 const BUF_BLOCKS = 4;
 const BUF_WORDS = BLOCK_WORDS * BUF_BLOCKS;
-
 const STATE_WORDS = 16;
-
 const U32_MASK = 0xffffffffn;
 
 function rotr32(x: number, n: number): number {
@@ -114,7 +112,6 @@ class ChaChaCore {
         const newCore = Object.create(ChaChaCore.prototype);
         newCore.state = this.state.slice();
         newCore.rounds = this.rounds;
-
         return newCore;
     }
 }
@@ -199,6 +196,115 @@ export class ChaChaRng {
             this.index += Math.ceil(bytesToCopy / 4);
             offset += bytesToCopy;
         }
+    }
+
+    genRange(low: number, high: number): number {
+        return this.genRangeU32(low, high);
+    }
+
+    genRangeU32(low: number, high: number): number {
+        if (!(low < high)) {
+            throw new Error("Low must be less than high");
+        }
+        
+        const range = high - low;
+        if (range === 0 || !Number.isFinite(range)) {
+            return low;
+        }
+        
+        if ((range & (range - 1)) === 0) {
+            return low + (this.nextU32() & (range - 1));
+        }
+        
+        const rangeLimit = (0xFFFFFFFF - (0xFFFFFFFF % range));
+        let x: number;
+        
+        do {
+            x = this.nextU32();
+        } while (x >= rangeLimit);
+        
+        return low + (x % range);
+    }
+    
+    genRangeI32(low: number, high: number): number {
+        if (!(low < high)) {
+            throw new Error("Low must be less than high");
+        }
+        
+        const range = high - low;
+        if (range <= 0 || !Number.isFinite(range)) {
+            return low;
+        }
+        
+        return low + this.genRangeU32(0, range);
+    }
+    
+    genRangeU64(low: bigint, high: bigint): bigint {
+        if (!(low < high)) {
+            throw new Error("Low must be less than high");
+        }
+        
+        const range = high - low;
+        if (range === 0n || range < 0n) {
+            return low;
+        }
+        
+        if ((range & (range - 1n)) === 0n) {
+            return low + (this.nextU64() & (range - 1n));
+        }
+        
+        const rangeLimit = ((1n << 64n) - ((1n << 64n) % range));
+        let x: bigint;
+        
+        do {
+            x = this.nextU64();
+        } while (x >= rangeLimit);
+        
+        return low + (x % range);
+    }
+    
+    genRangeI64(low: bigint, high: bigint): bigint {
+        if (!(low < high)) {
+            throw new Error("Low must be less than high");
+        }
+        
+        const range = high - low;
+        if (range <= 0n) {
+            return low;
+        }
+        
+        return low + this.genRangeU64(0n, range);
+    }
+    
+    genRangeF64(low: number, high: number): number {
+        if (!(low < high)) {
+            throw new Error("Low must be less than high");
+        }
+        
+        if (!Number.isFinite(low) || !Number.isFinite(high)) {
+            throw new Error("Range bounds must be finite");
+        }
+        
+        const u32 = this.nextU32();
+        const rand01 = (u32 >>> 11) / (1 << 21);
+        
+        return low + rand01 * (high - low);
+    }
+    
+    genRangeF64Precise(low: number, high: number): number {
+        if (!(low < high)) {
+            throw new Error("Low must be less than high");
+        }
+        
+        if (!Number.isFinite(low) || !Number.isFinite(high)) {
+            throw new Error("Range bounds must be finite");
+        }
+        
+        const hi = this.nextU32() >>> (32 - 26);
+        const lo = this.nextU32() >>> (32 - 27);
+        const rand01 = (hi * (1 << 27) + lo) / (1 << 21);
+        
+        return low + rand01 * (high - low);
     }
 
     getWordPos(): bigint {
