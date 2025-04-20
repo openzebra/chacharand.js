@@ -246,7 +246,6 @@ describe('ChaCha Tests', () => {
 
     it('test_chacha_from_seed_gen_range', () => {
         const rng = ChaChaRng.fromU64Seed(42n, 20);
-        console.log(rng.genRangeU64(0n, 1024n));
         expect(rng.genRangeU64(0n, 1024n)).toBe(526n);
     });
 });

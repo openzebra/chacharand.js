@@ -9,7 +9,6 @@ function rotr32(x: number, n: number): number {
     return ((x >>> n) | (x << (32 - n))) >>> 0;
 }
 
-// Helper for 64x64 -> 128 bit multiplication needed for unbiased range generation
 function wmul64(a: bigint, b: bigint): { hi: bigint, lo: bigint } {
     const result = a * b;
     const hi = result >> 64n;
@@ -130,6 +129,10 @@ class ChaChaCore {
     }
 }
 
+/**
+ * A cryptographically secure random number generator that uses the ChaCha algorithm.
+ * Based on the Rust `rand_chacha` crate implementation.
+ */
 export class ChaChaRng {
     private core: ChaChaCore;
     private buffer: Uint32Array;
@@ -143,12 +146,26 @@ export class ChaChaRng {
         this.rounds = rounds;
     }
 
+    /**
+     * Creates a new ChaChaRng instance from a 32-byte seed.
+     * Uses a default nonce (stream ID 0).
+     * @param seed The 32-byte seed.
+     * @param rounds The number of rounds (8, 12, or 20).
+     * @returns A new ChaChaRng instance.
+     */
     static fromSeed(seed: Uint8Array, rounds: 8 | 12 | 20): ChaChaRng {
         const defaultNonce = new Uint8Array(8);
         const core = new ChaChaCore(seed, defaultNonce, rounds);
         return new ChaChaRng(core, rounds);
     }
 
+    /**
+     * Creates a new ChaChaRng instance from a 64-bit integer seed.
+     * Uses a simple seeding algorithm derived from PCG to initialize the 32-byte seed.
+     * @param state The initial 64-bit seed value (as bigint).
+     * @param rounds The number of rounds (8, 12, or 20).
+     * @returns A new ChaChaRng instance.
+     */
     static fromU64Seed(state: bigint, rounds: 8 | 12 | 20): ChaChaRng {
         const seed = new Uint8Array(32);
         const stateObj = { value: state };
@@ -176,6 +193,10 @@ export class ChaChaRng {
         this.index = 0;
     }
 
+    /**
+     * Generates the next random u32 value.
+     * @returns A random unsigned 32-bit integer.
+     */
     nextU32(): number {
         if (this.index >= BUF_WORDS) {
             this.refill();
@@ -185,15 +206,22 @@ export class ChaChaRng {
         return val;
     }
 
+    /**
+     * Generates the next random u64 value (as bigint).
+     * @returns A random unsigned 64-bit integer (bigint).
+     */
     nextU64(): bigint {
         const low = BigInt(this.nextU32());
         const high = BigInt(this.nextU32());
         return (high << 32n) | low;
     }
 
+    /**
+     * Fills the given byte array with random bytes.
+     * @param bytes The Uint8Array to fill.
+     */
     fillBytes(bytes: Uint8Array): void {
         const len = bytes.length;
-        const byteView = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
         let offset = 0;
         while (offset < len) {
             if (this.index >= BUF_WORDS) {
@@ -210,11 +238,15 @@ export class ChaChaRng {
         }
     }
 
-    // --- Range Generation Methods ---
-
     /**
-     * Generates a random number within the specified range [low, high).
-     * Matches Rust's `rand::Rng::gen_range(low..high)` for u64.
+     * Generates a random u64 (bigint) within the specified range.
+     * Matches the behavior of Rust's `rand::Rng::gen_range` for u64, using
+     * Canon's method (potentially biased, matching Rust's default).
+     * @param low The lower bound of the range (inclusive).
+     * @param high The upper bound of the range.
+     * @param inclusive If true, the range is [low, high]. If false, the range is [low, high). Defaults to false.
+     * @returns A random bigint within the specified range.
+     * @throws Error if the range is invalid (e.g., low > high).
      */
     genRangeU64(low: bigint, high: bigint, inclusive: boolean = false): bigint {
         let effectiveHigh = high;
@@ -222,46 +254,56 @@ export class ChaChaRng {
              if (!(low < high)) {
                 throw new Error("Upper bound must be strictly greater than lower bound for exclusive range");
              }
-             effectiveHigh = high - 1n; // Convert exclusive high to inclusive high for the sampling logic
+             effectiveHigh = high - 1n;
         } else {
             if (!(low <= high)) {
                 throw new Error("Upper bound must be greater than or equal to lower bound for inclusive range");
             }
         }
 
-        const rangeSize = (effectiveHigh - low + 1n) & U64_MASK; // Calculate inclusive range size with wrapping
+        const rangeSize = (effectiveHigh - low + 1n) & U64_MASK;
 
         if (rangeSize === 0n) {
-            // This means the range covers all u64 values
             return this.nextU64();
         }
 
-        // Sample using Canon's method (potentially biased, matching Rust default)
         const { hi: resultHi, lo: resultLo } = wmul64(this.nextU64(), rangeSize);
-        let finalResult = resultHi; // Start with high part of multiplication
+        let finalResult = resultHi;
 
-        // Bias reduction check
-        const negRange = (-rangeSize) & U64_MASK; // wrapping_neg()
+        const negRange = (-rangeSize) & U64_MASK;
         if (resultLo > negRange) {
-            // Sample is biased, perform bias reduction step
             const { hi: newHiOrder } = wmul64(this.nextU64(), rangeSize);
             const checkAdd = resultLo + newHiOrder;
-            const isOverflow = checkAdd > U64_MASK; // checked_add().is_none()
+            const isOverflow = checkAdd > U64_MASK;
             if (isOverflow) {
-                finalResult = (finalResult + 1n) & U64_MASK; // Increment result on overflow
+                finalResult = (finalResult + 1n) & U64_MASK;
             }
         }
 
-        return (low + finalResult) & U64_MASK; // wrapping_add()
+        return (low + finalResult) & U64_MASK;
     }
 
-    // Optional: Alias for backwards compatibility or direct mapping
+    /**
+     * Alias for genRangeU64. Generates a random u64 (bigint) within the specified range.
+     * Matches the behavior of Rust's `rand::Rng::gen_range` for u64.
+     * @param low The lower bound of the range (inclusive).
+     * @param high The upper bound of the range.
+     * @param inclusive If true, the range is [low, high]. If false, the range is [low, high). Defaults to false.
+     * @returns A random bigint within the specified range.
+     * @throws Error if the range is invalid (e.g., low > high).
+     */
     gen_range_u64(low: bigint, high: bigint, inclusive: boolean = false): bigint {
         return this.genRangeU64(low, high, inclusive);
     }
 
-
-    // Keep other genRange methods if needed, or remove if only u64 is required
+    /**
+     * Generates a random u32 within the specified exclusive range [low, high).
+     * Uses rejection sampling for unbiased results.
+     * @param low The lower bound (inclusive).
+     * @param high The upper bound (exclusive).
+     * @returns A random number within the range.
+     * @throws Error if low >= high.
+     */
     genRangeU32(low: number, high: number): number {
         if (!(low < high)) {
             throw new Error("Low must be less than high for exclusive range");
@@ -283,6 +325,13 @@ export class ChaChaRng {
         return (low + (x % range_u32)) >>> 0;
     }
 
+    /**
+     * Generates a random i32 within the specified exclusive range [low, high).
+     * @param low The lower bound (inclusive).
+     * @param high The upper bound (exclusive).
+     * @returns A random number within the range.
+     * @throws Error if low >= high.
+     */
     genRangeI32(low: number, high: number): number {
          if (!(low < high)) {
              throw new Error("Low must be less than high for exclusive range");
@@ -295,6 +344,13 @@ export class ChaChaRng {
          return low + this.genRangeU32(0, range_u32);
     }
 
+    /**
+     * Generates a random i64 (bigint) within the specified exclusive range [low, high).
+     * @param low The lower bound (inclusive).
+     * @param high The upper bound (exclusive).
+     * @returns A random bigint within the range.
+     * @throws Error if low >= high.
+     */
      genRangeI64(low: bigint, high: bigint): bigint {
          if (!(low < high)) {
              throw new Error("Low must be less than high for exclusive range");
@@ -303,11 +359,19 @@ export class ChaChaRng {
          if (range <= 0n) {
              return low;
          }
-         // Use the u64 inclusive logic for the offset [0, range-1]
-         const offset = this.genRangeU64(0n, range-1n, true);
+         // Generate offset in [0, range-1] inclusive
+         const offset = this.genRangeU64(0n, range -1n, true);
          return low + offset;
      }
 
+    /**
+     * Generates a random f64 (number) within the specified exclusive range [low, high).
+     * Uses 53 bits of precision from the generator.
+     * @param low The lower bound (inclusive).
+     * @param high The upper bound (exclusive).
+     * @returns A random number within the range.
+     * @throws Error if low >= high or bounds are not finite.
+     */
     genRangeF64(low: number, high: number): number {
          if (!(low < high)) {
              throw new Error("Low must be less than high for exclusive range");
@@ -321,8 +385,11 @@ export class ChaChaRng {
          return low + scale * (high - low);
     }
 
-    // --- Other Methods ---
-
+    /**
+     * Gets the current position within the generator's output stream, measured in 32-bit words.
+     * This is a 68-bit value (combining the 64-bit block counter and 4-bit word index within a block).
+     * @returns The current absolute word position as a bigint.
+     */
     getWordPos(): bigint {
         const bufEndBlock = this.core.getBlockPos();
         const bufStartBlock = (bufEndBlock - BigInt(BUF_BLOCKS)) & U64_MASK;
@@ -334,6 +401,12 @@ export class ChaChaRng {
         return currentWordPos;
     }
 
+    /**
+     * Sets the current position within the generator's output stream.
+     * The position is measured in 32-bit words from the beginning of the stream.
+     * This will refill the internal buffer.
+     * @param wordOffset The absolute word position to seek to (as bigint).
+     */
     setWordPos(wordOffset: bigint): void {
         const targetBlock = wordOffset / BigInt(BLOCK_WORDS);
         const wordIndexInBlock = Number(wordOffset % BigInt(BLOCK_WORDS));
@@ -342,21 +415,42 @@ export class ChaChaRng {
         this.index = Math.min(Math.max(wordIndexInBlock, 0), BUF_WORDS);
     }
 
+    /**
+     * Sets the stream number (nonce). This allows generating multiple independent sequences
+     * from the same seed.
+     * Behavior matches Rust's rand_chacha: if the buffer is not fully consumed,
+     * the current position is preserved, but future generated blocks will use the new stream ID.
+     * @param stream The 64-bit stream ID (as bigint).
+     */
     setStream(stream: bigint): void {
         this.core.setNonce(stream);
-        this.core.setBlockPos(0n);
-        this.refill();
-        this.index = 0;
+        if (this.index < BUF_WORDS) {
+             const wp = this.getWordPos();
+             this.setWordPos(wp);
+        }
     }
 
+    /**
+     * Gets the current stream number (nonce).
+     * @returns The current 64-bit stream ID (as bigint).
+     */
     getStream(): bigint {
         return this.core.getNonce();
     }
 
+    /**
+     * Gets the seed used to initialize the generator.
+     * @returns The 32-byte seed as a Uint8Array.
+     */
     getSeed(): Uint8Array {
         return this.core.getSeed();
     }
 
+    /**
+     * Creates a clone of the current RNG state. The clone will produce the
+     * same sequence of numbers as the original from this point forward.
+     * @returns A new ChaChaRng instance with the same state.
+     */
     clone(): ChaChaRng {
         const newRng = Object.create(ChaChaRng.prototype);
         newRng.core = this.core.clone();
@@ -367,6 +461,10 @@ export class ChaChaRng {
     }
 }
 
+/** Factory function for ChaCha8Rng. */
 export const ChaCha8Rng = (seed: Uint8Array) => ChaChaRng.fromSeed(seed, 8);
+/** Factory function for ChaCha12Rng. */
 export const ChaCha12Rng = (seed: Uint8Array) => ChaChaRng.fromSeed(seed, 12);
+/** Factory function for ChaCha20Rng. */
 export const ChaCha20Rng = (seed: Uint8Array) => ChaChaRng.fromSeed(seed, 20);
+
