@@ -1,6 +1,6 @@
 {
   "name": "@hicaru/chacharand.js",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Pure JavaScript implementation of ChaCha8/12/20 random number generator",
   "main": "dist/index.js",
   "module": "dist/index.js",
