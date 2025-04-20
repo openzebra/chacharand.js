@@ -3,9 +3,18 @@ const BUF_BLOCKS = 4;
 const BUF_WORDS = BLOCK_WORDS * BUF_BLOCKS;
 const STATE_WORDS = 16;
 const U32_MASK = 0xffffffffn;
+const U64_MASK = (1n << 64n) - 1n;
 
 function rotr32(x: number, n: number): number {
     return ((x >>> n) | (x << (32 - n))) >>> 0;
+}
+
+// Helper for 64x64 -> 128 bit multiplication needed for unbiased range generation
+function wmul64(a: bigint, b: bigint): { hi: bigint, lo: bigint } {
+    const result = a * b;
+    const hi = result >> 64n;
+    const lo = result & U64_MASK;
+    return { hi, lo };
 }
 
 class ChaChaCore {
@@ -36,6 +45,8 @@ class ChaChaCore {
         } else {
             this.state[14] = nonceView.getUint32(0, true);
             this.state[15] = nonceView.getUint32(4, true);
+            this.state[12] = 0;
+            this.state[13] = 0;
         }
     }
 
@@ -61,20 +72,23 @@ class ChaChaCore {
         if (results.length !== BUF_WORDS) throw new Error("Results buffer must have size " + BUF_WORDS);
         const workingState = new Uint32Array(STATE_WORDS);
         const blockInputState = new Uint32Array(this.state);
+
         for (let block = 0; block < BUF_BLOCKS; block++) {
             workingState.set(blockInputState);
             for (let i = 0; i < this.rounds; i++) {
                 this.coreRound(workingState);
             }
+            const offset = block * BLOCK_WORDS;
             for (let i = 0; i < STATE_WORDS; i++) {
-                results[block * BLOCK_WORDS + i] = (workingState[i] + blockInputState[i]) >>> 0;
+                results[offset + i] = (workingState[i] + blockInputState[i]) >>> 0;
             }
             blockInputState[12] = (blockInputState[12] + 1) >>> 0;
             if (blockInputState[12] === 0) {
                 blockInputState[13] = (blockInputState[13] + 1) >>> 0;
             }
         }
-        this.state.set(blockInputState.subarray(12, 14), 12);
+        this.state[12] = blockInputState[12];
+        this.state[13] = blockInputState[13];
     }
 
     getBlockPos(): bigint {
@@ -88,16 +102,16 @@ class ChaChaCore {
         this.state[13] = Number((value >> 32n) & U32_MASK);
     }
 
-    getNonce(): bigint {
-        const low = BigInt(this.state[14]);
-        const high = BigInt(this.state[15]);
-        return (high << 32n) | low;
-    }
+     getNonce(): bigint {
+       const low = BigInt(this.state[14]);
+       const high = BigInt(this.state[15]);
+       return (high << 32n) | low;
+     }
 
-    setNonce(value: bigint): void {
-        this.state[14] = Number(value & U32_MASK);
-        this.state[15] = Number((value >> 32n) & U32_MASK);
-    }
+     setNonce(value: bigint): void {
+       this.state[14] = Number(value & U32_MASK);
+       this.state[15] = Number((value >> 32n) & U32_MASK);
+     }
 
     getSeed(): Uint8Array {
         const seed = new Uint8Array(32);
@@ -109,10 +123,10 @@ class ChaChaCore {
     }
 
     clone(): ChaChaCore {
-        const newCore = Object.create(ChaChaCore.prototype);
-        newCore.state = this.state.slice();
-        newCore.rounds = this.rounds;
-        return newCore;
+      const newCore = Object.create(ChaChaCore.prototype);
+      newCore.state = this.state.slice();
+      newCore.rounds = this.rounds;
+      return newCore;
     }
 }
 
@@ -130,32 +144,31 @@ export class ChaChaRng {
     }
 
     static fromSeed(seed: Uint8Array, rounds: 8 | 12 | 20): ChaChaRng {
-        const core = new ChaChaCore(seed, new Uint8Array(8), rounds);
+        const defaultNonce = new Uint8Array(8);
+        const core = new ChaChaCore(seed, defaultNonce, rounds);
         return new ChaChaRng(core, rounds);
     }
 
     static fromU64Seed(state: bigint, rounds: 8 | 12 | 20): ChaChaRng {
         const seed = new Uint8Array(32);
         const stateObj = { value: state };
-
         for (let i = 0; i < 8; i++) {
             const x = ChaChaRng.pcg32(stateObj);
             const view = new DataView(seed.buffer, i * 4, 4);
             view.setUint32(0, x, true);
         }
-
         return ChaChaRng.fromSeed(seed, rounds);
     }
 
     private static pcg32(state: { value: bigint }): number {
         const MUL = 6364136223846793005n;
         const INC = 11634580027462260723n;
-        state.value = (state.value * MUL + INC) & ((1n << 64n) - 1n);
+        state.value = (state.value * MUL + INC) & U64_MASK;
         const s = state.value;
-        const xorshifted = Number((((s >> 18n) ^ s) >> 27n) & 0xFFFFFFFFn);
+        const xorshifted = Number((((s >> 18n) ^ s) >> 27n) & U32_MASK);
         const rot = Number((s >> 59n) & 0x1Fn);
         const x = (xorshifted >>> rot) | (xorshifted << (32 - rot) & 0xFFFFFFFF);
-        return x;
+        return x >>> 0;
     }
 
     private refill(): void {
@@ -189,133 +202,135 @@ export class ChaChaRng {
             const bufferRemainingWords = BUF_WORDS - this.index;
             const bufferRemainingBytes = bufferRemainingWords * 4;
             const bytesToCopy = Math.min(len - offset, bufferRemainingBytes);
-            const internalBufferView = new DataView(this.buffer.buffer, this.buffer.byteOffset + this.index * 4);
-            for (let i = 0; i < bytesToCopy; i++) {
-                byteView.setUint8(offset + i, internalBufferView.getUint8(i));
-            }
-            this.index += Math.ceil(bytesToCopy / 4);
-            offset += bytesToCopy;
+            const internalBufferAsBytes = new Uint8Array(this.buffer.buffer, this.buffer.byteOffset + this.index * 4, bytesToCopy);
+             bytes.set(internalBufferAsBytes, offset);
+             const wordsCopied = Math.ceil(bytesToCopy / 4);
+             this.index += wordsCopied;
+             offset += bytesToCopy;
         }
     }
 
-    genRange(low: number, high: number): number {
-        return this.genRangeU32(low, high);
+    // --- Range Generation Methods ---
+
+    /**
+     * Generates a random number within the specified range [low, high).
+     * Matches Rust's `rand::Rng::gen_range(low..high)` for u64.
+     */
+    genRangeU64(low: bigint, high: bigint, inclusive: boolean = false): bigint {
+        let effectiveHigh = high;
+        if (!inclusive) {
+             if (!(low < high)) {
+                throw new Error("Upper bound must be strictly greater than lower bound for exclusive range");
+             }
+             effectiveHigh = high - 1n; // Convert exclusive high to inclusive high for the sampling logic
+        } else {
+            if (!(low <= high)) {
+                throw new Error("Upper bound must be greater than or equal to lower bound for inclusive range");
+            }
+        }
+
+        const rangeSize = (effectiveHigh - low + 1n) & U64_MASK; // Calculate inclusive range size with wrapping
+
+        if (rangeSize === 0n) {
+            // This means the range covers all u64 values
+            return this.nextU64();
+        }
+
+        // Sample using Canon's method (potentially biased, matching Rust default)
+        const { hi: resultHi, lo: resultLo } = wmul64(this.nextU64(), rangeSize);
+        let finalResult = resultHi; // Start with high part of multiplication
+
+        // Bias reduction check
+        const negRange = (-rangeSize) & U64_MASK; // wrapping_neg()
+        if (resultLo > negRange) {
+            // Sample is biased, perform bias reduction step
+            const { hi: newHiOrder } = wmul64(this.nextU64(), rangeSize);
+            const checkAdd = resultLo + newHiOrder;
+            const isOverflow = checkAdd > U64_MASK; // checked_add().is_none()
+            if (isOverflow) {
+                finalResult = (finalResult + 1n) & U64_MASK; // Increment result on overflow
+            }
+        }
+
+        return (low + finalResult) & U64_MASK; // wrapping_add()
     }
 
+    // Optional: Alias for backwards compatibility or direct mapping
+    gen_range_u64(low: bigint, high: bigint, inclusive: boolean = false): bigint {
+        return this.genRangeU64(low, high, inclusive);
+    }
+
+
+    // Keep other genRange methods if needed, or remove if only u64 is required
     genRangeU32(low: number, high: number): number {
         if (!(low < high)) {
-            throw new Error("Low must be less than high");
+            throw new Error("Low must be less than high for exclusive range");
         }
-        
         const range = high - low;
         if (range === 0 || !Number.isFinite(range)) {
             return low;
         }
-        
-        if ((range & (range - 1)) === 0) {
-            return low + (this.nextU32() & (range - 1));
+        const range_u32 = range >>> 0;
+        if ((range_u32 & (range_u32 - 1)) === 0) {
+             const mask = range_u32 - 1;
+            return (low + (this.nextU32() & mask)) >>> 0;
         }
-        
-        const rangeLimit = (0xFFFFFFFF - (0xFFFFFFFF % range));
+        const rangeLimit = (0xFFFFFFFF - (0xFFFFFFFF % range_u32));
         let x: number;
-        
         do {
             x = this.nextU32();
         } while (x >= rangeLimit);
-        
-        return low + (x % range);
+        return (low + (x % range_u32)) >>> 0;
     }
-    
+
     genRangeI32(low: number, high: number): number {
-        if (!(low < high)) {
-            throw new Error("Low must be less than high");
-        }
-        
-        const range = high - low;
-        if (range <= 0 || !Number.isFinite(range)) {
-            return low;
-        }
-        
-        return low + this.genRangeU32(0, range);
+         if (!(low < high)) {
+             throw new Error("Low must be less than high for exclusive range");
+         }
+         const range = high - low;
+         if (range <= 0 || !Number.isFinite(range)) {
+             return low;
+         }
+         const range_u32 = range >>> 0;
+         return low + this.genRangeU32(0, range_u32);
     }
-    
-    genRangeU64(low: bigint, high: bigint): bigint {
-        if (!(low < high)) {
-            throw new Error("Low must be less than high");
-        }
-        
-        const range = high - low;
-        if (range === 0n || range < 0n) {
-            return low;
-        }
-        
-        if ((range & (range - 1n)) === 0n) {
-            return low + (this.nextU64() & (range - 1n));
-        }
-        
-        const rangeLimit = ((1n << 64n) - ((1n << 64n) % range));
-        let x: bigint;
-        
-        do {
-            x = this.nextU64();
-        } while (x >= rangeLimit);
-        
-        return low + (x % range);
-    }
-    
-    genRangeI64(low: bigint, high: bigint): bigint {
-        if (!(low < high)) {
-            throw new Error("Low must be less than high");
-        }
-        
-        const range = high - low;
-        if (range <= 0n) {
-            return low;
-        }
-        
-        return low + this.genRangeU64(0n, range);
-    }
-    
+
+     genRangeI64(low: bigint, high: bigint): bigint {
+         if (!(low < high)) {
+             throw new Error("Low must be less than high for exclusive range");
+         }
+         const range = high - low;
+         if (range <= 0n) {
+             return low;
+         }
+         // Use the u64 inclusive logic for the offset [0, range-1]
+         const offset = this.genRangeU64(0n, range-1n, true);
+         return low + offset;
+     }
+
     genRangeF64(low: number, high: number): number {
-        if (!(low < high)) {
-            throw new Error("Low must be less than high");
-        }
-        
-        if (!Number.isFinite(low) || !Number.isFinite(high)) {
-            throw new Error("Range bounds must be finite");
-        }
-        
-        const u32 = this.nextU32();
-        const rand01 = (u32 >>> 11) / (1 << 21);
-        
-        return low + rand01 * (high - low);
+         if (!(low < high)) {
+             throw new Error("Low must be less than high for exclusive range");
+         }
+         if (!Number.isFinite(low) || !Number.isFinite(high)) {
+             throw new Error("Range bounds must be finite");
+         }
+         const randomU64 = this.nextU64();
+         const random53bit = randomU64 >> (64n - 53n);
+         const scale = Number(random53bit) / Number(1n << 53n);
+         return low + scale * (high - low);
     }
-    
-    genRangeF64Precise(low: number, high: number): number {
-        if (!(low < high)) {
-            throw new Error("Low must be less than high");
-        }
-        
-        if (!Number.isFinite(low) || !Number.isFinite(high)) {
-            throw new Error("Range bounds must be finite");
-        }
-        
-        const hi = this.nextU32() >>> (32 - 26);
-        const lo = this.nextU32() >>> (32 - 27);
-        const rand01 = (hi * (1 << 27) + lo) / (1 << 21);
-        
-        return low + rand01 * (high - low);
-    }
+
+    // --- Other Methods ---
 
     getWordPos(): bigint {
         const bufEndBlock = this.core.getBlockPos();
-        const bufStartBlock = (bufEndBlock - BigInt(BUF_BLOCKS)) & ((1n << 64n) - 1n);
+        const bufStartBlock = (bufEndBlock - BigInt(BUF_BLOCKS)) & U64_MASK;
         const bufOffsetWords = BigInt(this.index);
         const blocksConsumed = bufOffsetWords / BigInt(BLOCK_WORDS);
         const wordsConsumedInBlock = bufOffsetWords % BigInt(BLOCK_WORDS);
-        const currentBlock = (bufStartBlock + blocksConsumed) & ((1n << 64n) - 1n);
+        const currentBlock = (bufStartBlock + blocksConsumed) & U64_MASK;
         const currentWordPos = (currentBlock * BigInt(BLOCK_WORDS)) + wordsConsumedInBlock;
-
         return currentWordPos;
     }
 
@@ -324,13 +339,14 @@ export class ChaChaRng {
         const wordIndexInBlock = Number(wordOffset % BigInt(BLOCK_WORDS));
         this.core.setBlockPos(targetBlock);
         this.refill();
-        this.index = Math.min(Math.max(wordIndexInBlock, 0), BUF_WORDS - 1);
+        this.index = Math.min(Math.max(wordIndexInBlock, 0), BUF_WORDS);
     }
 
     setStream(stream: bigint): void {
         this.core.setNonce(stream);
-        const wp = this.getWordPos();
-        this.setWordPos(wp);
+        this.core.setBlockPos(0n);
+        this.refill();
+        this.index = 0;
     }
 
     getStream(): bigint {
@@ -343,12 +359,10 @@ export class ChaChaRng {
 
     clone(): ChaChaRng {
         const newRng = Object.create(ChaChaRng.prototype);
-
         newRng.core = this.core.clone();
         newRng.buffer = this.buffer.slice();
         newRng.index = this.index;
         newRng.rounds = this.rounds;
-
         return newRng;
     }
 }
