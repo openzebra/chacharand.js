@@ -207,6 +207,16 @@ export class ChaChaRng {
     }
 
     /**
+     * Generates the next random u8 value.
+     * @returns A random unsigned 8-bit integer.
+     */
+    nextU8(): number {
+        const byteArray = new Uint8Array(1);
+        this.fillBytes(byteArray);
+        return byteArray[0];
+    }
+
+    /**
      * Generates the next random u64 value (as bigint).
      * @returns A random unsigned 64-bit integer (bigint).
      */
@@ -467,4 +477,3 @@ export const ChaCha8Rng = (seed: Uint8Array) => ChaChaRng.fromSeed(seed, 8);
 export const ChaCha12Rng = (seed: Uint8Array) => ChaChaRng.fromSeed(seed, 12);
 /** Factory function for ChaCha20Rng. */
 export const ChaCha20Rng = (seed: Uint8Array) => ChaChaRng.fromSeed(seed, 20);
-

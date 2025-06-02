@@ -1,6 +1,6 @@
 {
   "name": "@hicaru/chacharand.js",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Pure JavaScript implementation of ChaCha8/12/20 random number generator",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "tsc",
+    "format": "prettier --write ./**/*.{js,ts,test.ts}",
     "build:watch": "tsc --watch"
   },
   "keywords": [
@@ -39,6 +40,7 @@
   "devDependencies": {
     "@types/bun": "^1.2.9",
     "@vitest/coverage-v8": "^3.1.1",
+    "prettier": "^3.5.3",
     "vitest": "^3.1.1"
   },
   "peerDependencies": {
